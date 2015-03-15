@@ -15,7 +15,7 @@ public class Communicator {
 	public Lock lock;
 	public Condition A, B, C, D;
 	private int message;
-	private boolean speakerWaiting, listenerWaiting;
+	private boolean speakerWaiting, listenerWaiting, speakerEntryOK, listenerEntryOK;
     /**
      * Allocate a new communicator.
      */
@@ -25,6 +25,8 @@ public class Communicator {
 		B = new Condition (lock);
 		C = new Condition (lock);
 		D = new Condition (lock);
+		speakerEntryOK = true;
+		listenerEntryOK = true;
     }
 
     /**
@@ -38,21 +40,27 @@ public class Communicator {
      * @param	word	the integer to transfer.
      */
     public void speak(int word) {
+		log ("Called speak (" + word + ")");
 		lock.acquire();
-		while (speakerWaiting) {
+		while (!speakerEntryOK) {
+			log("Sleeping on B");
 			B.sleep();
 		}
-		System.out.println("I have passed the first gate in speak()");
+		speakerEntryOK = false;
+
+		speakerWaiting = true;
 		message = word;
+		C.wake();
+		log("speakerWaiting = true, called C.wake()");
 		while (!listenerWaiting) {
-			System.out.println("Will sleep on A");
-			speakerWaiting = true;
+			log("Will sleep on A");
 			A.sleep();
 		}
-		System.out.println("Message has been set to " + message);
-		speakerWaiting = false;
-		C.wake();
+		log("Setting listenerWaiting to false, waking B, and returning");
+		listenerWaiting = false;
+		speakerEntryOK = true;
 		B.wake();
+
 		lock.release();
     }
 
@@ -63,25 +71,29 @@ public class Communicator {
      * @return	the integer transferred.
      */    
     public int listen() {
+		log ("Called listen");
 		int val = 0;
 		lock.acquire();
-		while (listenerWaiting) {
+		while (!listenerEntryOK) {
+			log("Will sleep on D");
 			D.sleep();
 		}
-		System.out.println("I have passed the first gate in listen()");
+		listenerEntryOK = false;
+
+		listenerWaiting = true;
+		A.wake();
+		log("listenerWaiting = true, listenerEntryOK = false, called A.wake()");
 		while (!speakerWaiting) {
-			System.out.println("Will sleep on C");
-			listenerWaiting = true;
+			log("Will sleep on C");
 			C.sleep();
 		}
-		System.out.println ("I have passed the second gate in listen()");
-		val = message;
-		listenerWaiting = false;	// placement?? - has troubles.
-		A.wake();
+		log("Setting speakerWaiting to false, waking D, and returning " + message);
+		speakerWaiting = false;
+		listenerEntryOK = true;
 		D.wake();
+
 		lock.release();
-		System.out.println("I am about to return " + val + " from listen");
-		return val;
+		return message;
     }
 
 	static class CommThing implements Runnable {
@@ -111,15 +123,23 @@ public class Communicator {
 		}
 	}
 
+	public static void log (String message) {
+		System.out.println(KThread.currentThread().getName() + ": " + message);
+	}
+
 	public static void selfTest () {
 		System.out.println("Hi.");
 		Communicator c = new Communicator();
-		KThread k = new KThread(new CommThing(c, 1));
-		KThread m = new KThread(new CommThing(c, 2));
-		k.fork();
-		m.fork();
-		k.join();
-		m.join();
+		int n = 4;
+		KThread[] thr = new KThread[n];
+		for (int i=0; i < n; i++) {
+			thr[i] = new KThread (new CommThing (c, i+1));
+			thr[i].setName ("Thread " + (i+1));
+			thr[i].fork();
+		}
+		for (int i=0; i < n; i++) {
+			thr[i].join();
+		}
 	}
 
 
