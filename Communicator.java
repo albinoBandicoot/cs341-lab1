@@ -94,54 +94,54 @@ public class Communicator {
         return val;
     }
 
-    static class CommThing implements Runnable {
+	static class CommThing implements Runnable {
 
-        public int n;
-        public Communicator c;
+		public int n;
+		public Communicator c;
 
-        public CommThing (Communicator c, int n) {
-            this.n = n;
-            this.c = c;
-        }
+		public CommThing (Communicator c, int n) {
+			this.n = n;
+			this.c = c;
+		}
 
-        public void run () {
-            System.out.println("Thread " + n + " has started");
-            if (n % 2 == 0) {
-                System.out.println("Thread " + n + " is about to listen");
-                int x = c.listen();
-                System.out.println("I am thread " + n + " and received " + x);
-                c.speak (n*5);
-                System.out.println("Thread " + n + " has spoken");
-            } else {
-                c.speak (n*5);
-                System.out.println("Thread " + n + " has spoken");
-                int x = c.listen();
-                System.out.println("I am thread " + n + " and received " + x);
-            }
-        }
-    }
+		public void run () {
+			System.out.println("Thread " + n + " has started");
+			if (n % 2 == 0) {
+				System.out.println("Thread " + n + " is about to listen");
+				int x = c.listen();
+				System.out.println("I am thread " + n + " and received " + x);
+				c.speak (n*5);
+				System.out.println("Thread " + n + " has spoken");
+			} else {
+				c.speak (n*5);
+				System.out.println("Thread " + n + " has spoken");
+				int x = c.listen();
+				System.out.println("I am thread " + n + " and received " + x);
+			}
+		}
+	}
 
-    public static void log (String message) {
-        System.out.println(KThread.currentThread().getName() + ": " + message);
-    }
+	public static void log (String message) {
+		System.out.println(KThread.currentThread().getName() + ": " + message);
+	}
 
-    public static void selfTest () {
-        Communicator c = new Communicator();
-        KThread k = new KThread(new CommThing(c, 1));
-        k.setName("1");
-        KThread m = new KThread(new CommThing(c, 2));
-        m.setName("2");
-        KThread o = new KThread(new CommThing(c, 3));
-        o.setName("3");
-        KThread p = new KThread(new CommThing(c, 4));
-        p.setName("4");
-        k.fork();
-        m.fork();
-        o.fork();
-        p.fork();
-        k.join();
-        m.join();
-        o.join();
-        p.join();
-    }
+	public static void selfTest () {
+		Communicator c = new Communicator();
+		KThread k = new KThread(new CommThing(c, 1));
+		k.setName("1");
+		KThread m = new KThread(new CommThing(c, 2));
+		m.setName("2");
+		KThread o = new KThread(new CommThing(c, 3));
+		o.setName("3");
+		KThread p = new KThread(new CommThing(c, 4));
+		p.setName("4");
+		k.fork();
+		m.fork();
+		o.fork();
+		p.fork();
+		k.join();
+		m.join();
+		o.join();
+		p.join();
+	}
 }
