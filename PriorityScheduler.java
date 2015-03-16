@@ -137,7 +137,7 @@ public class PriorityScheduler extends Scheduler {
 
 		public void log (String message) {
 			if (this == KThread.readyQueue) {
-				System.out.println("--- cpu output ommitted ---");
+				System.out.println("--- cpu: " + message);
 			} else {
 				System.out.println(message);
 			}
@@ -163,6 +163,12 @@ public class PriorityScheduler extends Scheduler {
 			}
 			System.out.println ("We should run " + waitQueue.peek() + " next.");
 			KThread res = waitQueue.poll().thread;
+			owner.donation_priority = getEffectivePriority();
+
+			if (owner.q.waitQueue.remove (owner)) {
+				owner.q.waitQueue.add (owner);
+			}
+
 			print();
 			return res;
 		}
@@ -221,11 +227,11 @@ public class PriorityScheduler extends Scheduler {
 		public int compareTo (ThreadState other) {
 		//	System.out.println("Comparing! priorities: " + priority + " vs. " + other.priority + "; times = " + entryTime + " vs. " + other.entryTime);
 			int res = 0;
-			if (priority == other.priority) {
+			if (donation_priority == other.donation_priority) {
 				// choose the one with earlier start time
 				res = new Integer(entryTime).compareTo (new Integer(other.entryTime));
 			} else {
-				res = -new Integer(priority).compareTo (new Integer(other.priority));
+				res = -new Integer(donation_priority).compareTo (new Integer(other.donation_priority));
 			}
 		//	System.out.println("result = " + res);
 			return res;
@@ -247,6 +253,7 @@ public class PriorityScheduler extends Scheduler {
 		 */
 		public int getEffectivePriority() {
 			if (!q.transferPriority || q.waitQueue.isEmpty()) return priority;
+			System.out.println("in get effective : the queue's max isthe queue's max is  " + q.waitQueue.peek().priority);
 			return Math.max (priority, q.waitQueue.peek().priority);
 		}
 
@@ -260,9 +267,12 @@ public class PriorityScheduler extends Scheduler {
 				return;
 
 			this.priority = priority;
+			this.donation_priority = priority;	// will get overwritten below if necessary
 			if (q != null) {
-				q.waitQueue.remove (this);
-				q.waitQueue.add (this);
+				if (q.waitQueue.remove (this)) {
+					q.waitQueue.add (this);
+					q.owner.donation_priority = getEffectivePriority();
+				}
 			}
 		}
 
@@ -282,6 +292,11 @@ public class PriorityScheduler extends Scheduler {
 			this.q = waitQueue;
 			entryTime = waitQueue.time;
 			waitQueue.waitQueue.add (this);
+			q.owner.donation_priority = getEffectivePriority();
+			if (q.owner.q.waitQueue.remove (q.owner)) {
+				q.owner.q.waitQueue.add (q.owner);
+			}
+
 			waitQueue.log("Just added myself to the queue. The queue is now: ");
 			waitQueue.print();
 			
@@ -304,13 +319,14 @@ public class PriorityScheduler extends Scheduler {
 		}	
 
 		public String toString () {
-			return thread.getName() + "; priority = " + priority + "; entryTime = " + entryTime;
+			return thread.getName() + "; priority = " + priority + "; donation priority = " + donation_priority + "; entryTime = " + entryTime;
 		}
 
 		/** The thread with which this object is associated. */	   
 		protected KThread thread;
 		/** The priority of the associated thread. */
 		protected int priority;
+		protected int donation_priority;
 		protected int entryTime;
 		protected PriorityQueue q;
 	}
@@ -328,20 +344,25 @@ public class PriorityScheduler extends Scheduler {
 		public void run () {
 			double q = 5;
 			for (int i=0; i < 2; i++) {
-				System.out.println("Hi from " + n + "; i = " + i + "; q = " + q);
+				System.out.println("Hi I'm thread " + n + " i = " + i);
 				a.acquire();
 				System.out.println("I have acquired the lock! I am thread " + n);
-
-				for (int j=0; j < 20; j++) {
+				for (int j=0; j < 800; j++) {
 					Machine.interrupt().disable();
+					if (j==0) {
+						ThreadedKernel.scheduler.setPriority (KThread.currentThread(), 1);
+					}
+
 					Machine.interrupt().enable();
 				}
 
 				a.release();
 				System.out.println("Thread " + n + " released the lock");
-				boolean intStatus = Machine.interrupt().disable();
-				ThreadedKernel.scheduler.setPriority (KThread.currentThread(), 2);
-				Machine.interrupt().restore(intStatus);
+//				if (n == 1) {
+					boolean intStatus = Machine.interrupt().disable();
+//					ThreadedKernel.scheduler.setPriority (KThread.currentThread(), 4);
+					Machine.interrupt().restore(intStatus);
+//				}
 
 			}
 		}
@@ -356,9 +377,9 @@ public class PriorityScheduler extends Scheduler {
 		m.setName ("thread 2");
 		n.setName ("thread 3");
 		boolean intStatus = Machine.interrupt().disable();
-		ThreadedKernel.scheduler.setPriority (k, 4);
-		ThreadedKernel.scheduler.setPriority (m, 7);
-		ThreadedKernel.scheduler.setPriority (n, 5);
+		ThreadedKernel.scheduler.setPriority (k, 5);
+		ThreadedKernel.scheduler.setPriority (m, 4);
+		ThreadedKernel.scheduler.setPriority (n, 3);
 		Machine.interrupt().restore(intStatus);
 		k.fork();
 		n.fork();
