@@ -62,7 +62,7 @@ public class PriorityScheduler extends Scheduler {
 				priority <= priorityMaximum);
 
 		getThreadState(thread).setPriority(priority);
-		System.out.println("Set the priority of " + thread.getName() + " to " + priority);
+		//System.out.println("Set the priority of " + thread.getName() + " to " + priority);
 		thread.yield();
 	}
 
@@ -132,28 +132,29 @@ public class PriorityScheduler extends Scheduler {
 		}
 
 		public void log (String message) {
-			/*
+			/* 
+			// we had made readyQueue public for debugging purposes; it is reverted now.
 			if (KThread.readyQueue != null && ((PriorityQueue) KThread.readyQueue).owner != null) {
 				System.out.println("the owner of the cpu queue is " + ((PriorityQueue) KThread.readyQueue).owner.thread.getName());
 			}
-			*/
 			if (this == KThread.readyQueue) {
 				System.out.println("--- cpu: " + message);
 			} else {
+			*/
 				System.out.println(message);
-			}
+			//}
 		}
 
 		public void waitForAccess(KThread thread) {
 			Lib.assertTrue(Machine.interrupt().disabled());
 			time++;
-			log (thread.getName() + " called waitForAccess; the time on the queue is " + time);
+			//log (thread.getName() + " called waitForAccess; the time on the queue is " + time);
 			getThreadState(thread).waitForAccess(this);
 		}
 
 		public void acquire(KThread thread) {
 			Lib.assertTrue(Machine.interrupt().disabled());
-			log (thread.getName() +  " called acquire()");
+			//log (thread.getName() +  " called acquire()");
 			getThreadState(thread).acquire(this);
 		}
 
@@ -162,7 +163,7 @@ public class PriorityScheduler extends Scheduler {
 			if (waitQueue.isEmpty()) {
 				return null;
 			}
-			log("We are going to decide what to run.");
+			//log("We are going to decide what to run.");
 //			waitQueue.print();
 			ThreadState[] tsa = new ThreadState[waitQueue.size()];
 			waitQueue.toArray (tsa);
@@ -170,7 +171,7 @@ public class PriorityScheduler extends Scheduler {
 			for (ThreadState t : tsa) {
 				waitQueue.add (t);
 			}
-			log("We should run " + waitQueue.peek() + " next.");
+			//log("We should run " + waitQueue.peek() + " next.");
 
 			owner.qdonate.remove (this);	// we're no longer going to be the owner, so we stop getting donations from this queue.
 			
@@ -180,7 +181,7 @@ public class PriorityScheduler extends Scheduler {
 			owner = res;
 			owner.donation_priority = owner.getEffectivePriority ();
 
-			print();
+			//print();
 			return res.thread;
 		}
 
@@ -318,8 +319,8 @@ public class PriorityScheduler extends Scheduler {
 				}
 			}
 
-			waitQueue.log("Just added myself to the queue. The queue is now: ");
-			waitQueue.print();
+			//waitQueue.log("Just added myself to the queue. The queue is now: ");
+			//waitQueue.print();
 			
 		}
 
@@ -356,11 +357,12 @@ public class PriorityScheduler extends Scheduler {
 	static class SchedThing implements Runnable {
 
 		public int n;
-		public Lock a;
+		public Lock a, b;
 		public KThread[] threads;
 
-		public SchedThing (Lock a, KThread[] th, int n) {
+		public SchedThing (Lock a, Lock b, KThread[] th, int n) {
 			this.a = a;
+			this.b = b;
 			this.n = n;
 			this.threads = th;
 		}
@@ -400,11 +402,12 @@ public class PriorityScheduler extends Scheduler {
 
 	public static void selfTest () {
 		Lock a = new Lock();
+		Lock b = new Lock();
 		int nthreads = 3;
 		KThread[] t = new KThread[nthreads];
 		boolean intStatus = Machine.interrupt().disable();
 		for (int i=0; i < nthreads; i++) {
-			t[i] = new KThread(new SchedThing(a, t, i));
+			t[i] = new KThread(new SchedThing(a, b, t, i));
 			t[i].setName ("thread " + i);
 			ThreadedKernel.scheduler.setPriority (t[i], i+3);
 		}
