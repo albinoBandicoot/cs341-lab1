@@ -194,7 +194,7 @@ public class KThread {
 
 		currentThread.status = statusFinished;
 		if (currentThread.joinCaller != null) {
-			currentThread.joinCaller.ready();
+			currentThread.joinCaller.nextThread().ready();
 		}
 
 		sleep();
@@ -281,8 +281,10 @@ public class KThread {
 		Lib.assertTrue(this != currentThread);
 
 		if (status == statusFinished) return;
-		this.joinCaller = currentThread;
+		this.joinCaller = ThreadedKernel.scheduler.newThreadQueue(true);
 		boolean intStatus = Machine.interrupt().disable();
+		this.joinCaller.acquire (this);
+		this.joinCaller.waitForAccess (currentThread);
 		sleep();
 		Machine.interrupt().restore(intStatus);
 
@@ -476,7 +478,7 @@ public class KThread {
 	 * on the ready queue and not running).
 	 */
 	private int status = statusNew;
-	private KThread joinCaller;
+	private ThreadQueue joinCaller;
 	private String name = "(unnamed thread)";
 	private Runnable target;
 	private TCB tcb;
@@ -494,3 +496,4 @@ public class KThread {
 	private static KThread toBeDestroyed = null;
 	private static KThread idleThread = null;
 }
+
