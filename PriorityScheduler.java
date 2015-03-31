@@ -2,11 +2,7 @@ package nachos.threads;
 
 import nachos.machine.*;
 
-import java.util.TreeSet;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.PriorityQueue;
-import java.util.Arrays;
+import java.util.*;
 
 /**
  * A scheduler that chooses threads based on their priorities.
@@ -166,24 +162,26 @@ public class PriorityScheduler extends Scheduler {
 			if (waitQueue.isEmpty()) {
 				return null;
 			}
-			System.out.println ("We are going to decide what to run.");
-			((PriorityQueue) KThread.readyQueue).print();
+			log("We are going to decide what to run.");
+//			waitQueue.print();
 			ThreadState[] tsa = new ThreadState[waitQueue.size()];
 			waitQueue.toArray (tsa);
 			waitQueue.clear();
 			for (ThreadState t : tsa) {
 				waitQueue.add (t);
 			}
-			System.out.println ("We should run " + waitQueue.peek() + " next.");
-			KThread res = waitQueue.poll().thread;
+			log("We should run " + waitQueue.peek() + " next.");
 
+			owner.qdonate.remove (this);	// we're no longer going to be the owner, so we stop getting donations from this queue.
+			
+			ThreadState res = waitQueue.poll();
+			res.q = null;	// we were waiting on this queue, but now we aren't waiting any more. We aren't on any queues. We'll get reloaded onto something through a call to waitForAccess; for instance if this is being called from the lock release method, after nextThread is called, ready() is called on the thread returned from here, and subsequently it is added to the CPU queue.
+			res.qdonate.add(this);
+			owner = res;
 			owner.donation_priority = owner.getEffectivePriority ();
-			if (owner.q.waitQueue.remove (owner)) {
-				owner.q.waitQueue.add (owner);
-			}
 
 			print();
-			return res;
+			return res.thread;
 		}
 
 		/**
@@ -235,6 +233,7 @@ public class PriorityScheduler extends Scheduler {
 		public ThreadState(KThread thread) {
 			this.thread = thread;
 			thread.schedulingState = this;
+			qdonate = new ArrayList<PriorityQueue>();
 
 			setPriority(priorityDefault);
 		}
@@ -267,10 +266,19 @@ public class PriorityScheduler extends Scheduler {
 		 * @return	the effective priority of the associated thread.
 		 */
 		public int getEffectivePriority() {
+			int p = priority;
+			for (PriorityQueue pq : qdonate) {
+				if (pq.transferPriority && !pq.waitQueue.isEmpty()) {
+					p = Math.max (p, pq.waitQueue.peek().donation_priority);
+				}
+			}
+			return p;
+			/*
 			//System.out.println("I am thread " + thread.getName() + "; my priority is " + priority + " and my old donation_priority = " + donation_priority);
-			if (!q.transferPriority || q.waitQueue.isEmpty()) return priority;
+			if (qdonate == null || !qdonate.transferPriority || qdonate.waitQueue.isEmpty()) return priority;
 			//System.out.println("in get effective : the queue's max isthe queue's max is  " + q.waitQueue.peek().donation_priority);
-			return Math.max (priority, q.waitQueue.peek().donation_priority);
+			return Math.max (priority, qdonate.waitQueue.peek().donation_priority);
+			*/
 		}
 
 		/**
@@ -283,13 +291,7 @@ public class PriorityScheduler extends Scheduler {
 				return;
 
 			this.priority = priority;
-			this.donation_priority = priority;	// will get overwritten below if necessary
-			if (q != null) {
-				if (q.waitQueue.remove (this)) {
-					q.waitQueue.add (this);
-					q.owner.donation_priority = q.owner.getEffectivePriority();
-				}
-			}
+			this.donation_priority = Math.max(priority, donation_priority);
 		}
 
 		/**
@@ -308,9 +310,12 @@ public class PriorityScheduler extends Scheduler {
 			this.q = waitQueue;
 			entryTime = waitQueue.time;
 			q.waitQueue.add (this);
+				//q.owner.donation_priority = Math.max (q.owner.priority, Math.max(q.waitQueue.peek().donation_priority /* handles lock */, q.owner.getEffectivePriority() /* handles join */));
 			q.owner.donation_priority = q.owner.getEffectivePriority();
-			if (q.owner.q.waitQueue.remove (q.owner)) {
-				q.owner.q.waitQueue.add (q.owner);
+			if (q.owner.q != null) {	// the owner is also on a queue itself, so we need to potentially donate some potentially newly acquired priority
+				if (q.owner.q.waitQueue.remove (q.owner)) {	// remove and insert to ensure the heap is maintained properly
+					q.owner.q.waitQueue.add (q.owner);
+				}
 			}
 
 			waitQueue.log("Just added myself to the queue. The queue is now: ");
@@ -331,7 +336,7 @@ public class PriorityScheduler extends Scheduler {
 		public void acquire(PriorityQueue waitQueue) {
 			// remember which thread called this
 			waitQueue.owner = this;
-			this.q = waitQueue;
+			this.qdonate.add (waitQueue);
 		}	
 
 		public String toString () {
@@ -344,7 +349,8 @@ public class PriorityScheduler extends Scheduler {
 		protected int priority;
 		protected int donation_priority;
 		protected int entryTime;
-		protected PriorityQueue q;
+		protected PriorityQueue q;	// the queue we are on, waiting for a resource. There only needs to be one of these, since further requests (eg for locks) can only happen if we have the cpu, and making one request that blocks gets us off the cpu
+		protected ArrayList<PriorityQueue> qdonate;	// the queues we are the owner of - that is, the resources we control, from which we extract donations
 	}
 
 	static class SchedThing implements Runnable {
@@ -363,25 +369,25 @@ public class PriorityScheduler extends Scheduler {
 			double q = 5;
 			for (int i=0; i < 2; i++) {
 				System.out.println("Hi I'm thread " + n + " i = " + i);
-				/*
 				if (n == 2) {
 					System.out.println("Thread 2 is JOINING THREAD 0!!!");
 					threads[0].join();
 				}
-				*/
-				a.acquire();
-				System.out.println("I have acquired the lock! I am thread " + n);
+				//a.acquire();
+				//System.out.println("I have acquired the lock! I am thread " + n);
 				for (int j=0; j < 80; j++) {
 					Machine.interrupt().disable();
+					/*
 					if (j==0) {
 						ThreadedKernel.scheduler.setPriority (KThread.currentThread(), 1);
 					}
+					*/
 
 					Machine.interrupt().enable();
 				}
 
-				a.release();
-				System.out.println("Thread " + n + " released the lock");
+//				a.release();
+//				System.out.println("Thread " + n + " released the lock");
 //				if (n == 1) {
 					boolean intStatus = Machine.interrupt().disable();
 //					ThreadedKernel.scheduler.setPriority (KThread.currentThread(), 4);
